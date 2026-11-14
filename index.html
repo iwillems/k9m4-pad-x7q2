@@ -5,8 +5,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenRouter Chat</title>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+
+
 <style>
   :root {
     --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
@@ -237,7 +237,7 @@
 </div>
 <div id="lightbox" hidden onclick="this.hidden = true"><img alt="Vergrote afbeelding"></div>
 
-<script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script><script>window.addEventListener("error", function(e){var m=document.getElementById("model");if(m)m.innerHTML="<option>JS-fout: "+(e.message||"onbekend").replace(/[<>&]/g,"")+"</option>";console.error("Global error:",e.error||e.message);});window.addEventListener("unhandledrejection", function(e){var m=document.getElementById("model");if(m&&m.options[0]&&m.options[0].text.indexOf("laden\u2026")>=0)m.innerHTML="<option>Promise-fout: "+String(e.reason).slice(0,120).replace(/[<>&]/g,"")+"</option>";console.error("Unhandled rejection:",e.reason);});</script><script>
 const $ = id => document.getElementById(id);
 const store = {
   get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
