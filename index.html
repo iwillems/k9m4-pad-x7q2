@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenRouter Chat</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --border: #e2e1dc; --accent: #2f5bd3; --accent-text: #fff;
+    --user: #eef2fc; --danger: #c0392b; --warn-bg: #fff6e0; --warn: #8a5a00;
+    --active: #e8ecf8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94;
+      --border: #33332f; --accent: #6e8ff0; --accent-text: #0d0d0c;
+      --user: #222a3d; --danger: #e5675a; --warn-bg: #3a2f14; --warn: #f0c060;
+      --active: #2a2f3d;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  input, select, textarea, button { font: inherit; color: inherit; }
+  input, select, textarea {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  }
+  button {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .5; cursor: default; }
+  [hidden] { display: none !important; }
+
+  #app { display: flex; height: 100%; }
+  aside {
+    width: 250px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;
+    background: var(--panel); border-right: 1px solid var(--border); padding: 12px;
+  }
+  body.sidebar-toggled aside { display: none; }
+  #chatlist { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .chatitem {
+    display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 6px 8px; cursor: pointer;
+  }
+  .chatitem:hover, .chatitem.active { background: var(--active); }
+  .chatitem .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .chatitem .d { font-size: 11px; color: var(--muted); display: block; }
+  .chatitem button { border: none; background: none; padding: 0 4px; color: var(--muted); }
+  #costs { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; }
+  #costs button { border: none; background: none; padding: 0; color: var(--accent); font-size: 12px; }
+
+  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  header {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  #filter { width: 140px; }
+  #model { flex: 1 1 240px; min-width: 0; max-width: 480px; }
+  #fav { padding: 6px 10px; }
+  #apikey { width: 180px; }
+  #modelinfo { color: var(--muted); font-size: 13px; padding: 4px 16px; }
+
+  #settings {
+    background: var(--panel); border-bottom: 1px solid var(--border); padding: 12px 16px;
+    display: grid; gap: 10px; grid-template-columns: 1fr; max-height: 50vh; overflow-y: auto;
+  }
+  #settings .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #settings label.title { font-weight: 600; font-size: 13px; }
+  #system { width: 100%; min-height: 70px; resize: vertical; }
+  #temp { width: 200px; }
+
+  #chat { flex: 1; overflow-y: auto; padding: 16px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  .msg {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 12px;
+  }
+  .msg.user { background: var(--user); }
+  .msg .meta {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted); margin-bottom: 6px;
+  }
+  .msg .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .msg .actions button, .msg .actions select { padding: 2px 8px; font-size: 12px; }
+  .msg .body { white-space: pre-wrap; word-wrap: break-word; }
+  .msg .body.md { white-space: normal; }
+  .body.md > :first-child { margin-top: 0; }
+  .body.md > :last-child { margin-bottom: 0; }
+  .body.md h1 { font-size: 1.5em; } .body.md h2 { font-size: 1.3em; } .body.md h3 { font-size: 1.1em; }
+  .body.md h1, .body.md h2, .body.md h3 { margin: 1.2em 0 .4em; line-height: 1.3; }
+  .body.md p { margin: 0 0 .8em; }
+  .body.md pre { background: var(--bg); padding: 8px; border-radius: 6px; overflow-x: auto; }
+  .body.md code { font-size: .9em; }
+  .body.md blockquote { margin: 0 0 .8em; padding-left: 12px; border-left: 3px solid var(--border); color: var(--muted); }
+  .body.md table { border-collapse: collapse; } .body.md td, .body.md th { border: 1px solid var(--border); padding: 4px 8px; }
+  .msg details.outline { margin-bottom: 8px; border: 1px dashed var(--border); border-radius: 6px; padding: 6px 10px; }
+  .msg details.outline summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .msg details.outline .body { margin-top: 6px; font-size: 14px; }
+  .note { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .note.warn { background: var(--warn-bg); color: var(--warn); padding: 6px 8px; border-radius: 6px; }
+  .msg.error .note.warn { color: var(--danger); }
+  .msg .images { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .msg .images:empty { display: none; }
+  .msg .images figure { margin: 0; max-width: 100%; }
+  .msg .images img {
+    display: block; max-width: 100%; max-height: 70vh; border-radius: 6px;
+    border: 1px solid var(--border); cursor: zoom-in;
+  }
+  .msg.user .images img { max-height: 160px; }
+  .msg .images figcaption { font-size: 12px; margin-top: 4px; }
+  .msg .images a { color: var(--accent); }
+  .empty { color: var(--muted); text-align: center; margin-top: 15vh; }
+
+  footer { border-top: 1px solid var(--border); background: var(--panel); padding: 12px 16px; }
+  footer.dragover { outline: 2px dashed var(--accent); outline-offset: -6px; }
+  footer .row { display: flex; gap: 8px; align-items: flex-end; }
+  #prompt { flex: 1; min-height: 80px; max-height: 50vh; resize: vertical; }
+  footer .buttons { display: flex; flex-direction: column; gap: 6px; }
+  footer .tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; font-size: 13px; }
+  footer .tools button { padding: 3px 10px; font-size: 13px; }
+  #longwords { width: 90px; padding: 3px 6px; }
+  .hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+  #attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  #attachments:empty { display: none; }
+  .thumb { position: relative; }
+  .thumb img { height: 64px; border-radius: 6px; border: 1px solid var(--border); display: block; }
+  .thumb button {
+    position: absolute; top: -6px; right: -6px; padding: 0 6px; border-radius: 50%;
+    font-size: 12px; line-height: 18px;
+  }
+
+  #lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex;
+    align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; z-index: 10;
+  }
+  #lightbox img { max-width: 100%; max-height: 100%; }
+
+  @media (max-width: 800px) {
+    aside { display: none; position: fixed; inset: 0 auto 0 0; z-index: 5; width: 270px; box-shadow: 0 0 30px rgba(0,0,0,.3); }
+    body.sidebar-toggled aside { display: flex; }
+    #filter, #apikey { flex: 1 1 40%; width: auto; }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <button id="newchat" class="primary">+ Nieuwe chat</button>
+    <div id="chatlist"></div>
+    <div id="costs"></div>
+  </aside>
+
+  <div id="main">
+    <header>
+      <button id="togglesidebar" title="Chats tonen/verbergen">☰</button>
+      <input id="filter" type="search" placeholder="Zoek model…">
+      <select id="model"><option>Modellen laden…</option></select>
+      <button id="fav" title="Favoriet aan/uit">☆</button>
+      <input id="apikey" type="password" placeholder="OpenRouter API-key" autocomplete="off">
+      <button id="togglesettings">Instellingen</button>
+      <select id="exportchat" title="Hele chat opslaan">
+        <option value="">Chat opslaan…</option>
+        <option value="doc">Word (.doc)</option>
+        <option value="txt">Tekst (.txt)</option>
+        <option value="md">Markdown (.md)</option>
+      </select>
+    </header>
+    <div id="modelinfo"></div>
+
+    <section id="settings" hidden>
+      <div>
+        <label class="title" for="system">Vaste instructie (gaat mee bij elke vraag)</label>
+        <div class="row" style="margin: 4px 0">
+          <select id="preset"></select>
+          <button id="savepreset">Bewaar als…</button>
+          <button id="delpreset">Verwijder</button>
+        </div>
+        <textarea id="system" placeholder="Bijvoorbeeld: Schrijf in correct Nederlands, levendige stijl, geen opsommingen."></textarea>
+      </div>
+      <div class="row">
+        <label class="title" for="temp">Creativiteit</label>
+        <input id="temp" type="range" min="0" max="2" step="0.1" value="1">
+        <span id="tempval"></span>
+      </div>
+      <div class="row">
+        <label><input id="autocontinue" type="checkbox" checked> Automatisch doorschrijven als het model zijn maximale lengte bereikt</label>
+      </div>
+      <div class="row" id="aspectwrap">
+        <label class="title" for="aspect">Beeldformaat</label>
+        <select id="aspect">
+          <option value="">Standaard</option>
+          <option value="1:1">Vierkant (1:1)</option>
+          <option value="16:9">Liggend breed (16:9)</option>
+          <option value="4:3">Liggend (4:3)</option>
+          <option value="3:2">Liggend foto (3:2)</option>
+          <option value="9:16">Staand smal (9:16)</option>
+          <option value="3:4">Staand (3:4)</option>
+          <option value="2:3">Staand foto (2:3)</option>
+        </select>
+        <span class="note" style="margin:0">Niet elk beeldmodel houdt zich hieraan.</span>
+      </div>
+    </section>
+
+    <main id="chat"><div class="wrap" id="messages"></div></main>
+
+    <footer id="composer">
+      <div class="wrap">
+        <div id="attachments"></div>
+        <div class="row">
+          <textarea id="prompt" placeholder="Je prompt…"></textarea>
+          <div class="buttons">
+            <button id="send" class="primary">Verstuur</button>
+            <button id="stop" class="danger" disabled>Stop</button>
+          </div>
+        </div>
+        <div class="tools">
+          <button id="attach">Afbeelding toevoegen</button>
+          <input id="file" type="file" accept="image/*" multiple hidden>
+          <label><input id="longmode" type="checkbox"> Lange tekst</label>
+          <span id="longopts">van <input id="longwords" type="number" min="1000" step="500" value="10000"> woorden</span>
+          <span class="hint">Cmd/Ctrl + Enter verstuurt · afbeeldingen kun je ook plakken of slepen</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+</div>
+<div id="lightbox" hidden onclick="this.hidden = true"><img alt="Vergrote afbeelding"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d = null) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  json(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  setJson(k, v) { this.set(k, JSON.stringify(v)); }
+};
+
+const CONTINUE_PROMPT = 'Ga precies verder waar je gebleven was, desnoods midden in de zin. Herhaal niets en begin niet met een inleiding.';
+const MAX_ROUNDS = 10;
+const DEFAULT_PRESETS = {
+  'Geen': '',
+  'Verhaal': 'Je bent een ervaren romanschrijver. Schrijf in levendig, correct Nederlands met sterke beelden, natuurlijke dialogen en afwisselende zinsbouw. Gebruik geen opsommingen en vat niets samen: schrijf alles volledig uit.',
+  'Artikel': 'Je bent een ervaren journalist. Schrijf helder, feitelijk en goed gestructureerd Nederlands met tussenkopjes. Vermijd clichés en wollig taalgebruik.',
+  'Zakelijk': 'Schrijf in professioneel, beknopt en correct Nederlands. Gebruik een duidelijke structuur met kopjes waar dat helpt.'
+};
+
+let models = [];
+let chat = newChat();
+let controller = null;
+let attachments = [];
+let sessionCost = 0;
+let presets = store.json('or_presets', DEFAULT_PRESETS);
+let favs = store.json('or_favs', []);
+
+/* ---------- opslag van gesprekken (IndexedDB) ---------- */
+const db = (() => {
+  let opening;
+  const open = () => opening ||= new Promise((res, rej) => {
+    const r = indexedDB.open('openrouter-chat', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('chats', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const tx = async (mode, fn) => {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const t = d.transaction('chats', mode);
+      const req = fn(t.objectStore('chats'));
+      t.oncomplete = () => res(req.result);
+      t.onerror = () => rej(t.error);
+    });
+  };
+  return {
+    all: () => tx('readonly', s => s.getAll()),
+    put: c => tx('readwrite', s => s.put(c)),
+    del: id => tx('readwrite', s => s.delete(id))
+  };
+})();
+
+function newChat() {
+  return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: '', created: Date.now(), updated: Date.now(), messages: [] };
+}
+
+async function saveChat() {
+  if (!chat.messages.length) return;
+  chat.updated = Date.now();
+  try { await db.put(chat); } catch (e) { console.warn('Opslaan mislukt', e); }
+  renderChatList();
+}
+
+async function renderChatList() {
+  const list = $('chatlist');
+  let chats;
+  try { chats = await db.all(); }
+  catch { list.innerHTML = '<div class="note">Gesprekken kunnen in deze browser niet bewaard worden.</div>'; return; }
+  chats.sort((a, b) => b.updated - a.updated);
+  list.innerHTML = '';
+  if (!chats.length) list.innerHTML = '<div class="note">Nog geen bewaarde gesprekken.</div>';
+  for (const c of chats) {
+    const item = el('div', 'chatitem' + (c.id === chat.id ? ' active' : ''));
+    const t = el('div', 't');
+    t.textContent = c.title || 'Zonder titel';
+    const d = el('span', 'd');
+    d.textContent = new Date(c.updated).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    t.appendChild(d);
+    const del = el('button');
+    del.textContent = '×';
+    del.title = 'Verwijder gesprek';
+    del.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm('Gesprek "' + (c.title || 'Zonder titel') + '" verwijderen?')) return;
+      await db.del(c.id);
+      if (c.id === chat.id) { chat = newChat(); renderChat(); }
+      renderChatList();
+    };
+    item.onclick = () => {
+      if (controller) return;
+      chat = c;
+      renderChat();
+      renderChatList();
+      if (innerWidth <= 800) document.body.classList.remove('sidebar-toggled');
+    };
+    item.append(t, del);
+    list.appendChild(item);
+  }
+}
+
+/* ---------- modellen ---------- */
+async function loadModels() {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models');
+    const data = await res.json();
+    models = data.data.sort((a, b) => a.name.localeCompare(b.name));
+    renderModels();
+  } catch {
+    $('model').innerHTML = '<option>Kon modellen niet laden</option>';
+  }
+}
+
+function modelOption(m) {
+  const o = document.createElement('option');
+  o.value = m.id;
+  o.textContent = m.name + (makesImages(m) ? '  [maakt afbeeldingen]' : '');
+  return o;
+}
+
+function renderModels() {
+  const q = $('filter').value.toLowerCase();
+  const sel = $('model');
+  const saved = models.some(m => m.id === sel.value) ? sel.value : store.get('or_model');
+  const match = m => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) ||
+    (q.includes('afbeelding') && makesImages(m));
+  const list = models.filter(match);
+  sel.innerHTML = '';
+  const favModels = list.filter(m => favs.includes(m.id));
+  if (favModels.length) {
+    const og = document.createElement('optgroup');
+    og.label = '★ Favorieten';
+    favModels.forEach(m => og.appendChild(modelOption(m)));
+    sel.appendChild(og);
+  }
+  const groups = {};
+  for (const m of list) (groups[m.id.split('/')[0]] ||= []).push(m);
+  for (const provider of Object.keys(groups).sort()) {
+    const og = document.createElement('optgroup');
+    og.label = provider;
+    groups[provider].forEach(m => og.appendChild(modelOption(m)));
+    sel.appendChild(og);
+  }
+  if (saved && list.some(m => m.id === saved)) sel.value = saved;
+  showModelInfo();
+}
+
+function currentModel() { return models.find(m => m.id === $('model').value); }
+function makesImages(m) { return (m?.architecture?.output_modalities || []).includes('image'); }
+function readsImages(m) { return (m?.architecture?.input_modalities || []).includes('image'); }
+function fmt(n) { return n == null ? '?' : n.toLocaleString('nl-NL'); }
+
+function showModelInfo() {
+  const m = currentModel();
+  $('aspectwrap').hidden = !makesImages(m);
+  $('fav').textContent = m && favs.includes(m.id) ? '★' : '☆';
+  if (!m) { $('modelinfo').textContent = ''; return; }
+  const p = m.pricing || {};
+  const per1M = v => v == null ? '?' : '$' + (parseFloat(v) * 1e6).toFixed(2);
+  const kinds = [readsImages(m) && 'leest afbeeldingen', makesImages(m) && 'maakt afbeeldingen'].filter(Boolean);
+  $('modelinfo').textContent =
+    `${m.id} · context ${fmt(m.context_length)} tokens · max output ${fmt(m.top_provider?.max_completion_tokens)} tokens · ` +
+    `${per1M(p.prompt)} / ${per1M(p.completion)} per 1M tokens (in/uit)` + (kinds.length ? ' · ' + kinds.join(', ') : '');
+}
+
+$('filter').addEventListener('input', renderModels);
+$('model').addEventListener('change', () => { store.set('or_model', $('model').value); showModelInfo(); });
+$('fav').addEventListener('click', () => {
+  const m = currentModel();
+  if (!m) return;
+  favs = favs.includes(m.id) ? favs.filter(id => id !== m.id) : [...favs, m.id];
+  store.setJson('or_favs', favs);
+  renderModels();
+});
+
+/* ---------- instellingen ---------- */
+$('apikey').value = store.get('or_key', '');
+$('apikey').addEventListener('change', e => store.set('or_key', e.target.value.trim()));
+
+function renderPresets() {
+  const sel = $('preset');
+  sel.innerHTML = '';
+  for (const name of Object.keys(presets)) {
+    const o = document.createElement('option');
+    o.value = o.textContent = name;
+    sel.appendChild(o);
+  }
+  sel.value = store.get('or_preset', 'Geen');
+}
+renderPresets();
+$('system').value = store.get('or_system', presets[$('preset').value] || '');
+$('preset').addEventListener('change', () => {
+  $('system').value = presets[$('preset').value] || '';
+  store.set('or_preset', $('preset').value);
+  store.set('or_system', $('system').value);
+});
+$('system').addEventListener('input', () => store.set('or_system', $('system').value));
+$('savepreset').addEventListener('click', () => {
+  const name = prompt('Naam voor deze instructie:', $('preset').value === 'Geen' ? '' : $('preset').value);
+  if (!name) return;
+  presets[name] = $('system').value;
+  store.setJson('or_presets', presets);
+  store.set('or_preset', name);
+  renderPresets();
+});
+$('delpreset').addEventListener('click', () => {
+  const name = $('preset').value;
+  if (name === 'Geen' || !confirm('Instructie "' + name + '" verwijderen?')) return;
+  delete presets[name];
+  store.setJson('or_presets', presets);
+  store.set('or_preset', 'Geen');
+  renderPresets();
+  $('system').value = '';
+  store.set('or_system', '');
+});
+
+function showTemp() {
+  const v = parseFloat($('temp').value);
+  const label = v < 0.5 ? 'voorspelbaar' : v < 0.95 ? 'beheerst' : v <= 1.05 ? 'standaard' : v < 1.5 ? 'creatief' : 'heel vrij (kan rommelig worden)';
+  $('tempval').textContent = v.toFixed(1) + ' – ' + label;
+}
+$('temp').value = store.get('or_temp', '1');
+showTemp();
+$('temp').addEventListener('input', () => { showTemp(); store.set('or_temp', $('temp').value); });
+$('autocontinue').checked = store.get('or_auto', '1') === '1';
+$('autocontinue').addEventListener('change', () => store.set('or_auto', $('autocontinue').checked ? '1' : '0'));
+$('aspect').value = store.get('or_aspect', '');
+$('aspect').addEventListener('change', () => store.set('or_aspect', $('aspect').value));
+$('longwords').value = store.get('or_longwords', '10000');
+$('longwords').addEventListener('change', () => store.set('or_longwords', $('longwords').value));
+$('longmode').addEventListener('change', () => $('longopts').style.opacity = $('longmode').checked ? 1 : .5);
+$('longopts').style.opacity = .5;
+$('togglesettings').addEventListener('click', () => $('settings').hidden = !$('settings').hidden);
+$('togglesidebar').addEventListener('click', () => document.body.classList.toggle('sidebar-toggled'));
+
+/* ---------- kosten ---------- */
+function renderCosts() {
+  const total = parseFloat(store.get('or_total', '0'));
+  $('costs').innerHTML = '';
+  $('costs').append(`Kosten deze sessie: $${sessionCost.toFixed(4)}`, document.createElement('br'), `Totaal: $${total.toFixed(4)} `);
+  const reset = el('button');
+  reset.textContent = '(op nul zetten)';
+  reset.onclick = () => { if (confirm('Totaal op nul zetten?')) { store.set('or_total', '0'); renderCosts(); } };
+  $('costs').appendChild(reset);
+}
+
+function addUsage(acc, u) {
+  if (!u) return;
+  acc.in += u.prompt_tokens || 0;
+  acc.out += u.completion_tokens || 0;
+  if (u.cost != null) {
+    acc.cost += u.cost;
+    sessionCost += u.cost;
+    store.set('or_total', String(parseFloat(store.get('or_total', '0')) + u.cost));
+    renderCosts();
+  }
+}
+
+/* ---------- weergave ---------- */
+function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
+
+function md(text) {
+  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(text));
+  return null;
+}
+
+function setBody(node, text, markdown) {
+  const html = markdown ? md(text) : null;
+  if (html != null) { node.classList.add('md'); node.innerHTML = html; }
+  else { node.classList.remove('md'); node.textContent = text; }
+}
+
+function renderImages(box, urls, small) {
+  box.innerHTML = '';
+  urls.forEach((url, i) => {
+    const fig = el('figure');
+    const img = el('img');
+    img.src = url;
+    img.alt = 'Afbeelding ' + (i + 1);
+    img.onclick = () => { $('lightbox').querySelector('img').src = url; $('lightbox').hidden = false; };
+    fig.appendChild(img);
+    if (!small) {
+      const cap = el('figcaption');
+      const a = el('a');
+      a.href = url;
+      a.download = 'afbeelding-' + Date.now() + '-' + (i + 1) + '.' + (url.match(/^data:image\/(\w+)/)?.[1] || 'png');
+      a.textContent = 'Opslaan';
+      cap.appendChild(a);
+      fig.appendChild(cap);
+    }
+    box.appendChild(fig);
+  });
+}
+
+function nearBottom() { const c = $('chat'); return c.scrollHeight - c.scrollTop - c.clientHeight < 150; }
+function scrollToBottom() { $('chat').scrollTop = $('chat').scrollHeight; }
+
+function button(label, onclick) {
+  const b = el('button');
+  b.textContent = label;
+  b.onclick = () => onclick(b);
+  return b;
+}
+
+function exportSelect(onpick) {
+  const s = el('select');
+  s.innerHTML = '<option value="">Opslaan…</option><option value="doc">Word (.doc)</option><option value="txt">Tekst (.txt)</option><option value="md">Markdown (.md)</option>';
+  s.onchange = () => { if (s.value) onpick(s.value); s.value = ''; };
+  return s;
+}
+
+function messageView(msg) {
+  $('messages').querySelector('.empty')?.remove();
+  const div = el('div', 'msg ' + msg.role);
+  const meta = el('div', 'meta'), name = el('span'), actions = el('span', 'actions');
+  meta.append(name, actions);
+  const outline = el('details', 'outline'), summary = el('summary'), outlineBody = el('div', 'body');
+  summary.textContent = 'Opzet';
+  outline.append(summary, outlineBody);
+  const body = el('div', 'body'), images = el('div', 'images'), status = el('div', 'note'), notes = el('div');
+  div.append(meta, outline, body, images, status, notes);
+  $('messages').appendChild(div);
+
+  let raf = 0;
+  const view = {
+    setStatus(t) { status.textContent = t || ''; status.hidden = !t; },
+    schedule() {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const stick = nearBottom();
+        view.render();
+        if (stick) scrollToBottom();
+      });
+    },
+    render() {
+      name.textContent = msg.role === 'user' ? 'Jij' : (msg.modelName || msg.model || 'Model');
+      outline.hidden = !msg.outline;
+      if (msg.outline) setBody(outlineBody, msg.outline, true);
+      body.hidden = !msg.content;
+      setBody(body, msg.content || '', msg.role === 'assistant');
+      renderImages(images, msg.images || [], msg.role === 'user');
+      notes.innerHTML = '';
+      if (msg.long) addNote(notes, `Lange tekst: ongeveer ${fmt(msg.long)} woorden`);
+      for (const n of msg.notes || []) addNote(notes, n.text, n.warn);
+      div.classList.toggle('error', !!msg.failed);
+      actions.innerHTML = '';
+      if (msg.content) actions.append(button('Kopieer', b => {
+        navigator.clipboard.writeText(msg.content);
+        b.textContent = 'Gekopieerd';
+        setTimeout(() => b.textContent = 'Kopieer', 1200);
+      }));
+      if (msg.role === 'assistant') {
+        if (msg.content) actions.append(exportSelect(kind => exportText(kind, chat.title || 'tekst', msg.content)));
+        if (chat.messages.at(-1) === msg && !controller)
+          actions.append(button(msg.failed ? 'Opnieuw proberen' : 'Opnieuw', regenerate));
+      }
+    }
+  };
+  view.setStatus('');
+  return view;
+}
+
+function addNote(box, text, warn) {
+  const n = el('div', 'note' + (warn ? ' warn' : ''));
+  n.textContent = text;
+  box.appendChild(n);
+}
+
+function renderChat() {
+  const top = $('chat').scrollTop;
+  $('messages').innerHTML = '';
+  if (!chat.messages.length) {
+    $('messages').innerHTML = '<div class="empty">Kies een model, typ je prompt en druk op Verstuur.</div>';
+    return;
+  }
+  chat.messages.forEach(msg => messageView(msg).render());
+  $('chat').scrollTop = top;
+}
+
+function setBusy(busy) {
+  $('send').disabled = busy;
+  $('stop').disabled = !busy;
+}
+
+/* ---------- exporteren ---------- */
+function download(name, mime, data) {
+  const a = el('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function plainText(text) {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*/g, '$1$2')
+    .replace(/^>\s?/gm, '')
+    .replace(/^[-*+]\s+/gm, '• ')
+    .replace(/^-{3,}$/gm, '');
+}
+
+function exportText(kind, title, text) {
+  const base = (title || 'tekst').replace(/[\\/:*?"<>|\n]+/g, ' ').trim().slice(0, 60) || 'tekst';
+  if (kind === 'md') download(base + '.md', 'text/markdown;charset=utf-8', text);
+  if (kind === 'txt') download(base + '.txt', 'text/plain;charset=utf-8', plainText(text));
+  if (kind === 'doc') {
+    const html = md(text) ?? '<pre>' + esc(text) + '</pre>';
+    download(base + '.doc', 'application/msword',
+      '﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">' +
+      '<head><meta charset="utf-8"><title>' + esc(base) + '</title>' +
+      '<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5}</style></head><body>' +
+      html + '</body></html>');
+  }
+}
+
+$('exportchat').addEventListener('change', () => {
+  const kind = $('exportchat').value;
+  $('exportchat').value = '';
+  const parts = chat.messages.filter(x => !x.failed && x.content).map(x =>
+    `**${x.role === 'user' ? 'Jij' : (x.modelName || 'Model')}:**\n\n${x.content}`);
+  if (!parts.length) { alert('Deze chat is nog leeg.'); return; }
+  exportText(kind, chat.title || 'chat', parts.join('\n\n---\n\n'));
+});
+
+/* ---------- afbeeldingen toevoegen ---------- */
+function resizeImage(file, max = 2048) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s);
+      c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Kon afbeelding niet lezen')); };
+    img.src = url;
+  });
+}
+
+async function addFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    try { attachments.push(await resizeImage(f)); } catch (e) { alert(e.message); }
+  }
+  renderAttachments();
+}
+
+function renderAttachments() {
+  const box = $('attachments');
+  box.innerHTML = '';
+  attachments.forEach((url, i) => {
+    const t = el('div', 'thumb');
+    const img = el('img');
+    img.src = url;
+    const x = button('×', () => { attachments.splice(i, 1); renderAttachments(); });
+    t.append(img, x);
+    box.appendChild(t);
+  });
+}
+
+$('attach').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+$('prompt').addEventListener('paste', e => {
+  const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/'));
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+$('composer').addEventListener('dragover', e => { e.preventDefault(); $('composer').classList.add('dragover'); });
+$('composer').addEventListener('dragleave', () => $('composer').classList.remove('dragover'));
+$('composer').addEventListener('drop', e => {
+  e.preventDefault();
+  $('composer').classList.remove('dragover');
+  addFiles([...e.dataTransfer.files]);
+});
+
+/* ---------- API ---------- */
+// Gemaakte afbeeldingen gaan mee in de volgende vraag, zodat je ze kunt laten aanpassen.
+function buildMessages(m, list) {
+  const out = [];
+  const sys = $('system').value.trim();
+  if (sys) out.push({ role: 'system', content: sys });
+  let carry = [];
+  for (const h of list) {
+    if (h.failed) continue;
+    if (h.role === 'assistant') {
+      out.push({ role: 'assistant', content: h.content || '[afbeelding]' });
+      carry = h.images || [];
+    } else {
+      const imgs = readsImages(m) ? [...carry, ...(h.images || [])] : [];
+      out.push(imgs.length
+        ? { role: 'user', content: [...imgs.map(url => ({ type: 'image_url', image_url: { url } })), { type: 'text', text: h.content }] }
+        : { role: 'user', content: h.content });
+      carry = [];
+    }
+  }
+  return out;
+}
+
+function withExtraText(message, extra) {
+  if (typeof message.content === 'string') return { ...message, content: message.content + extra };
+  return { ...message, content: message.content.map(p => p.type === 'text' ? { ...p, text: p.text + extra } : p) };
+}
+
+async function streamCompletion(messages, m, onDelta) {
+  const payload = { model: m.id, messages, stream: true, usage: { include: true } };
+  const maxOut = m.top_provider?.max_completion_tokens;
+  if (maxOut) payload.max_tokens = maxOut;
+  const temp = parseFloat($('temp').value);
+  if (temp !== 1) payload.temperature = temp;
+  if (makesImages(m)) {
+    payload.modalities = ['image', 'text'];
+    if ($('aspect').value) payload.image_config = { aspect_ratio: $('aspect').value };
+  }
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + $('apikey').value.trim(),
+      'Content-Type': 'application/json',
+      'X-Title': 'OpenRouter Chat'
+    },
+    body: JSON.stringify(payload),
+    signal: controller.signal
+  });
+  if (!res.ok) {
+    let msg = res.status + ' ' + res.statusText;
+    try { const j = await res.json(); msg = j.error?.message || msg; } catch {}
+    throw new Error(msg);
+  }
+
+  let text = '', finish = null, usage = null;
+  const images = [];
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') continue;
+      let j;
+      try { j = JSON.parse(data); } catch { continue; }
+      if (j.error) throw new Error(j.error.message || 'Onbekende fout');
+      const choice = j.choices?.[0];
+      let changed = false;
+      if (choice?.delta?.content) { text += choice.delta.content; changed = true; }
+      for (const im of choice?.delta?.images || choice?.message?.images || []) {
+        const url = im.image_url?.url || im.url;
+        if (url && !images.includes(url)) { images.push(url); changed = true; }
+      }
+      if (choice?.finish_reason) finish = choice.finish_reason;
+      if (j.usage) usage = j.usage;
+      if (changed) onDelta({ text, images });
+    }
+  }
+  return { text, images, finish, usage };
+}
+
+// Eén antwoord, met automatisch doorschrijven als het model de maximale lengte raakt.
+async function generate(messages, m, onProgress, acc) {
+  let text = '', finish = null;
+  const images = [];
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const msgs = round === 0 ? messages
+      : [...messages, { role: 'assistant', content: text }, { role: 'user', content: CONTINUE_PROMPT }];
+    const base = text;
+    const r = await streamCompletion(msgs, m, d => onProgress(base + d.text, [...images, ...d.images]));
+    text = base + r.text;
+    r.images.forEach(u => images.includes(u) || images.push(u));
+    addUsage(acc, r.usage);
+    finish = r.finish;
+    if (finish !== 'length' || !$('autocontinue').checked || !r.text) break;
+  }
+  return { text, images, finish };
+}
+
+// Lange tekst: eerst een opzet, daarna deel voor deel uitschrijven.
+async function runLong(userMsg, m, msg, view, acc) {
+  const total = userMsg.long;
+  const n = Math.max(2, Math.round(total / 1200));
+  const per = Math.round(total / n / 50) * 50;
+  const base = buildMessages(m, chat.messages.slice(0, -1));
+  const planRequest = `\n\nMaak eerst alleen een gedetailleerde opzet voor deze tekst. De volledige tekst wordt ongeveer ${total} woorden, ` +
+    `verdeeld over ${n} delen van elk ongeveer ${per} woorden. Geef per deel een titel en een beschrijving van wat erin gebeurt. ` +
+    `Schrijf de tekst zelf nog niet uit.`;
+  const planMsgs = [...base.slice(0, -1), withExtraText(base.at(-1), planRequest)];
+
+  view.setStatus('Opzet maken…');
+  const plan = await generate(planMsgs, m, t => { msg.outline = t; view.schedule(); }, acc);
+  msg.outline = plan.text;
+
+  const convo = [...planMsgs, { role: 'assistant', content: plan.text }];
+  const parts = [];
+  for (let i = 1; i <= n; i++) {
+    view.setStatus(`Deel ${i} van ${n} schrijven…`);
+    const req = {
+      role: 'user',
+      content: `Schrijf nu deel ${i} van ${n} volledig uit, ongeveer ${per} woorden. Begin met de titel van dit deel als kop (##). ` +
+        `Sluit naadloos aan op de vorige delen en volg de opzet. Schrijf alleen de tekst van dit deel, zonder inleiding of commentaar achteraf.` +
+        (i === n ? ' Dit is het laatste deel: rond het geheel af.' : '')
+    };
+    const r = await generate([...convo, req], m, t => { msg.content = [...parts, t].join('\n\n'); view.schedule(); }, acc);
+    parts.push(r.text.trim());
+    msg.content = parts.join('\n\n');
+    convo.push(req, { role: 'assistant', content: r.text });
+  }
+}
+
+async function runAssistant(m) {
+  const userMsg = chat.messages.at(-1);
+  const msg = { role: 'assistant', content: '', images: [], model: m.id, modelName: m.name, notes: [] };
+  chat.messages.push(msg);
+  controller = new AbortController();
+  setBusy(true);
+  const view = messageView(msg);
+  view.render();
+  view.setStatus('Bezig…');
+  scrollToBottom();
+  const acc = { in: 0, out: 0, cost: 0 };
+
+  try {
+    if (userMsg.long) {
+      await runLong(userMsg, m, msg, view, acc);
+    } else {
+      const r = await generate(buildMessages(m, chat.messages.slice(0, -1)), m, (t, imgs) => {
+        msg.content = t;
+        msg.images = imgs;
+        view.setStatus('');
+        view.schedule();
+      }, acc);
+      msg.content = r.text;
+      msg.images = r.images;
+      if (r.finish === 'length') msg.notes.push({ warn: true, text: $('autocontinue').checked
+        ? `Het model bleef zijn maximale lengte raken; doorschrijven is na ${MAX_ROUNDS} rondes gestopt. Typ "ga verder" om nog meer te laten schrijven.`
+        : 'Het model heeft zijn maximale outputlengte bereikt. Typ "ga verder" om door te laten schrijven, of zet automatisch doorschrijven aan bij Instellingen.' });
+      if (makesImages(m) && !msg.images.length && msg.content)
+        msg.notes.push({ text: 'Er kwam geen afbeelding terug. Vraag er expliciet om, bijvoorbeeld "Maak een afbeelding van…".' });
+    }
+  } catch (err) {
+    msg.notes.push({ warn: true, text: err.name === 'AbortError' ? 'Gestopt.' : 'Fout: ' + err.message });
+  }
+
+  if (!msg.content && !msg.images.length) msg.failed = true;
+  else {
+    const words = msg.content.trim() ? msg.content.trim().split(/\s+/).length : 0;
+    let info = `${fmt(words)} woorden`;
+    if (acc.in || acc.out) info += ` · ${fmt(acc.in)} tokens in, ${fmt(acc.out)} tokens uit`;
+    if (acc.cost) info += ` · $${acc.cost.toFixed(4)}`;
+    msg.notes.push({ text: info });
+  }
+  controller = null;
+  setBusy(false);
+  renderChat();
+  saveChat();
+}
+
+function checkReady() {
+  if (!$('apikey').value.trim()) { alert('Vul eerst je OpenRouter API-key in.'); $('apikey').focus(); return null; }
+  const m = currentModel();
+  if (!m) { alert('Kies eerst een model.'); return null; }
+  store.set('or_key', $('apikey').value.trim());
+  return m;
+}
+
+async function send() {
+  if (controller) return;
+  const m = checkReady();
+  if (!m) return;
+  const text = $('prompt').value;
+  if (!text.trim() && !attachments.length) return;
+  if (attachments.length && !readsImages(m)) {
+    alert('Dit model kan geen afbeeldingen lezen. Kies een ander model of verwijder de afbeelding.');
+    return;
+  }
+  // Een vraag zonder (geslaagd) antwoord wordt vervangen door de nieuwe.
+  chat.messages = chat.messages.filter(x => !x.failed);
+  if (chat.messages.at(-1)?.role === 'user') chat.messages.pop();
+
+  const userMsg = { role: 'user', content: text, images: attachments.slice() };
+  if ($('longmode').checked) userMsg.long = Math.max(1000, parseInt($('longwords').value, 10) || 10000);
+  chat.messages.push(userMsg);
+  if (!chat.title) chat.title = text.trim().slice(0, 60) || 'Afbeelding';
+  $('prompt').value = '';
+  attachments = [];
+  renderAttachments();
+  renderChat();
+  await runAssistant(m);
+}
+
+async function regenerate() {
+  if (controller) return;
+  const m = checkReady();
+  if (!m) return;
+  chat.messages = chat.messages.filter(x => !x.failed);
+  if (chat.messages.at(-1)?.role === 'assistant') chat.messages.pop();
+  if (chat.messages.at(-1)?.role !== 'user') return;
+  renderChat();
+  await runAssistant(m);
+}
+
+$('send').addEventListener('click', send);
+$('stop').addEventListener('click', () => controller?.abort());
+$('prompt').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+});
+$('newchat').addEventListener('click', () => {
+  if (controller) return;
+  chat = newChat();
+  renderChat();
+  renderChatList();
+  $('prompt').focus();
+});
+
+renderChat();
+renderChatList();
+renderCosts();
+loadModels();
+</script>
+</body>
+</html>
