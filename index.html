@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="nl">
 <head>
+    <meta name="robots" content="noindex, nofollow">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenRouter Chat</title>
@@ -648,7 +649,8 @@ function exportText(kind, title, text) {
     const html = md(text) ?? '<pre>' + esc(text) + '</pre>';
     download(base + '.doc', 'application/msword',
       '﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">' +
-      '<head><meta charset="utf-8"><title>' + esc(base) + '</title>' +
+      '<head>
+    <meta name="robots" content="noindex, nofollow"><meta charset="utf-8"><title>' + esc(base) + '</title>' +
       '<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5}</style></head><body>' +
       html + '</body></html>');
   }
